@@ -2,12 +2,16 @@ import os
 import discord
 import tempfile
 import aiohttp
+import asyncio
 import random
+import wc
+import wordcloud
 import xml.etree.ElementTree as ET
 from aiohttp_socks import ProxyConnector
 from discord.ext import commands
 from dotenv import load_dotenv
 from gtts import gTTS
+from io import BytesIO
 
 load_dotenv()
 token = os.getenv("DISCORD_TOKEN")
@@ -45,19 +49,35 @@ async def on_reaction_add(reaction, user):
 async def hentai(ctx, arg=None):
     connector = ProxyConnector.from_url(
         'socks5://127.0.0.1:1080')
-    url = "https://gelbooru.com/index.php?page=dapi&s=post&q=index&tags=rating:explicit"
+    url = "https://gelbooru.com/index.php?page=dapi&s=post&q=index&tags=-rating:safe"
     async with aiohttp.ClientSession(connector=connector) as session:
         async with session.get(url) as response:
             result = await response.read()
-            tree = ET.fromstring(result.decode('ascii'))
+            tree = ET.fromstring(result.decode('utf-8'))
             post = random.choice(tree)
-            await ctx.send(f"{post.find('sample_url').text}")
+            message = await ctx.send(f"{post.find('sample_url').text}")
+            await asyncio.sleep(60)
+            await ctx.message.delete()
+            await message.delete()
 
 
 @bot.command(name="poke")
 async def poke(ctx, *targets):
     for target in targets:
         await ctx.send(f"{target} hey, wake up!")
+
+
+@bot.command(name="words")
+async def words(ctx: commands.Context, n="200"):
+    messages = await ctx.channel.history(limit=int(n)).flatten()
+    words = wc.cloud((m.content for m in messages), ctx.guild)
+    cloud = wordcloud.WordCloud(
+        width=1960, height=1080).generate_from_frequencies(words).to_image()
+    image = BytesIO()
+    cloud.save(image, format="PNG")
+    image.seek(0)
+    await ctx.channel.send(file=discord.File(
+        fp=image, filename="word_cloud.png"))
 
 
 @bot.command(name="boop")
@@ -85,5 +105,7 @@ async def say(ctx: commands.Context, lang, *msg):
             while channel.is_playing():
                 pass
             await channel.disconnect()
+    else:
+        await ctx.message.reply("Зайди в войс, фашист!")
 
 bot.run(token)
